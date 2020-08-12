@@ -44,8 +44,11 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
@@ -314,7 +317,7 @@ public class HBaseClient2 extends site.ycsb.DB {
    */
   @Override
   public Status scan(String table, String startkey, int recordcount,
-      Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
+      Set<String> fields, Vector<HashMap<String, ByteIterator>> result ) {
     // if this is a "new" table, init HTable object. Else, use existing one
     if (!tableName.equals(table)) {
       currentTable = null;
@@ -367,6 +370,7 @@ public class HBaseClient2 extends site.ycsb.DB {
               new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
         }
 
+        System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
         // add rowResult to result vector
         result.add(rowResult);
         numResults++;
@@ -391,6 +395,113 @@ public class HBaseClient2 extends site.ycsb.DB {
 
     return Status.OK;
   }
+
+  public Status scan(String table, String startkey, int recordcount,
+      Set<String> fields, Vector<HashMap<String, ByteIterator>> result, List<String> conditions ) {
+    // [largerOrEqual column value], [smallerOrEqual column value]
+    List<String[]> conditionList = new ArrayList();
+    for(String condition:conditions){
+      String[] parts = condition.split(" ");
+      conditionList.add(parts);
+    }
+
+    // if this is a "new" table, init HTable object. Else, use existing one
+    if (!tableName.equals(table)) {
+      currentTable = null;
+      try {
+        getHTable(table);
+        tableName = table;
+      } catch (IOException e) {
+        System.err.println("Error accessing HBase table: " + e);
+        return Status.ERROR;
+      }
+    }
+
+    Scan s = new Scan(Bytes.toBytes(startkey));
+    // HBase has no record limit. Here, assume recordcount is small enough to
+    // bring back in one call.
+    // We get back recordcount records
+    s.setCaching(recordcount);
+    if (this.usePageFilter) {
+      s.setFilter(new PageFilter(recordcount));
+    }
+
+    // add specified fields or else all fields
+    if (fields == null) {
+      s.addFamily(columnFamilyBytes);
+    } else {
+      for (String field : fields) {
+        s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
+      }
+    }
+
+    // get results
+    ResultScanner scanner = null;
+    try {
+      scanner = currentTable.getScanner(s);
+      int numResults = 0;
+      for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+        // get row key
+        String key = Bytes.toString(rr.getRow());
+
+        if (debug) {
+          System.out.println("Got scan result for key: " + key);
+        }
+
+        HashMap<String, ByteIterator> rowResult =
+            new HashMap<String, ByteIterator>();
+
+        while (rr.advance()) {
+          final Cell cell = rr.current();
+          rowResult.put(Bytes.toString(CellUtil.cloneQualifier(cell)),
+              new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
+        }
+        boolean filtersMatch = true;
+        for (String[] condition:conditionList){
+          String col = condition[1];
+          int value = Integer.parseInt(condition[2]);
+          rowResult.get(col).reset();
+          ByteIterator x = rowResult.get(col);
+          int res = ByteBuffer.wrap(x.toArray()).getInt();
+          if(condition[0].equals("largerOrEqual")){
+            filtersMatch = (res >=value) && filtersMatch;
+          }
+          else if(condition[0].equals("smallerOrEqual")){
+            filtersMatch = (res <= value) && filtersMatch;
+          }
+        }
+
+
+        // add rowResult to result vector if the filters match
+        if (filtersMatch) {
+          rowResult.get("aaaa").reset();
+          System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
+          result.add(rowResult);
+          numResults++;
+        }
+
+        // PageFilter does not guarantee that the number of results is <=
+        // pageSize, so this
+        // break is required.
+        if (numResults >= recordcount) {// if hit recordcount, bail out
+          break;
+        }
+      } // done with row
+    } catch (IOException e) {
+      if (debug) {
+        System.out.println("Error in getting/parsing scan result: " + e);
+      }
+      return Status.ERROR;
+    } finally {
+      if (scanner != null) {
+        scanner.close();
+      }
+    }
+
+    return Status.OK;
+  }
+
+
 
   /**
    * Update a record in the database. Any field/value pairs in the specified

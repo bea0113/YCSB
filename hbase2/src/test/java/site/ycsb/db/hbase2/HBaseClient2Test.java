@@ -46,6 +46,7 @@ import org.junit.Test;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
@@ -160,6 +161,7 @@ public class HBaseClient2Test {
       final byte[] value = java.nio.ByteBuffer.allocate(4).putInt(i).array();
       final Put p = new Put(key);
       p.addColumn(Bytes.toBytes(COLUMN_FAMILY), col, value);
+      p.addColumn(Bytes.toBytes(COLUMN_FAMILY), Bytes.toBytes("aaaa"), Bytes.toBytes(i*i));
       puts.add(p);
     }
     table.put(puts);
@@ -168,17 +170,20 @@ public class HBaseClient2Test {
     final Vector<HashMap<String, ByteIterator>> result =
         new Vector<HashMap<String, ByteIterator>>();
 
+    List<String> conditions= new ArrayList<>(Arrays.asList( "smallerOrEqual aaaa 49", "largerOrEqual aaaa 3"));
+
     // Scan 5 records, skipping the first
-    client.scan(tableName, "00001", 5, null, result);
+    client.scan(tableName, "00001", 5, null, result, conditions);
 
     assertEquals(5, result.size());
     for(int i = 0; i < 5; i++) {
       final HashMap<String, ByteIterator> row = result.get(i);
-      assertEquals(1, row.size());
+      assertEquals(2, row.size());
       assertTrue(row.containsKey(colStr));
       final byte[] bytes = row.get(colStr).toArray();
       final ByteBuffer buf = ByteBuffer.wrap(bytes);
       final int rowNum = buf.getInt();
+      System.out.println(rowNum);
       assertEquals(i + 1, rowNum);
     }
   }
