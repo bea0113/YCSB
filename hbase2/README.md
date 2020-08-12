@@ -71,6 +71,7 @@ Following options can be configurable using `-p`.
 * `clientbuffering`: Whether or not to use client side buffering and batching of write operations. This can significantly improve performance and defaults to true.
 * `writebuffersize`: The maximum amount, in bytes, of data to buffer on the client side before a flush is forced. The default is 12MB. Only used when `clientbuffering` is true.
 * `durability`: Whether or not writes should be appended to the WAL. Bypassing the WAL can improve throughput but data cannot be recovered in the event of a crash. The default is true.
-
+* `hbase.usescanvaluefiltering` : If true, the given fields will be filtered by their value.
+* `hbase.scanfilteroperation`: 
 Additional HBase settings should be provided in the `hbase-site.xml` file located in your `/HBASE-HOME-DIR/conf` directory. Typically this will be `/etc/hbase/conf`.
 

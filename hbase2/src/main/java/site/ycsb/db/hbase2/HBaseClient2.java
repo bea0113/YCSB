@@ -15,16 +15,10 @@
 
 package site.ycsb.db.hbase2;
 
-import site.ycsb.ByteArrayByteIterator;
-import site.ycsb.ByteIterator;
-import site.ycsb.DBException;
-import site.ycsb.Status;
-import site.ycsb.measurements.Measurements;
-
-import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -40,13 +34,23 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.security.UserGroupInformation;
+import site.ycsb.ByteArrayByteIterator;
+import site.ycsb.ByteIterator;
+import site.ycsb.DBException;
+import site.ycsb.RandomByteIterator;
+import site.ycsb.Status;
+import site.ycsb.measurements.Measurements;
 
 import java.io.IOException;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,9 +65,9 @@ import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY_DEFAULT;
  */
 public class HBaseClient2 extends site.ycsb.DB {
   private static final AtomicInteger THREAD_COUNT = new AtomicInteger(0);
-  
+
   private Configuration config = HBaseConfiguration.create();
-  
+
   private boolean debug = false;
 
   private String tableName = "";
@@ -102,6 +106,12 @@ public class HBaseClient2 extends site.ycsb.DB {
   private long writeBufferSize = 1024 * 1024 * 12;
 
   /**
+   * If true, value filtering during scans.
+   */
+  private boolean useScanValueFiltering = false;
+  private String scanFilterOperation = "";
+
+  /**
    * Initialize any state for this DB. Called once per DB instance; there is one
    * DB instance per client thread.
    */
@@ -126,8 +136,8 @@ public class HBaseClient2 extends site.ycsb.DB {
       UserGroupInformation.setConfiguration(config);
     }
 
-    if ((getProperties().getProperty("principal")!=null)
-        && (getProperties().getProperty("keytab")!=null)) {
+    if ((getProperties().getProperty("principal") != null)
+        && (getProperties().getProperty("keytab") != null)) {
       try {
         UserGroupInformation.loginUserFromKeytab(getProperties().getProperty("principal"),
               getProperties().getProperty("keytab"));
@@ -168,6 +178,13 @@ public class HBaseClient2 extends site.ycsb.DB {
     if ("false"
         .equals(getProperties().getProperty("hbase.usepagefilter", "true"))) {
       usePageFilter = false;
+    }
+
+    if ("true"
+        .equals(
+            getProperties().getProperty("hbase.usescanvaluefiltering", "false"))) {
+      useScanValueFiltering=true;
+      scanFilterOperation = getProperties().getProperty("hbase.scanfilteroperation");
     }
 
     columnFamily = getProperties().getProperty("columnfamily");
@@ -331,9 +348,12 @@ public class HBaseClient2 extends site.ycsb.DB {
     // HBase has no record limit. Here, assume recordcount is small enough to
     // bring back in one call.
     // We get back recordcount records
+
+    FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
+
     s.setCaching(recordcount);
     if (this.usePageFilter) {
-      s.setFilter(new PageFilter(recordcount));
+      filterList.addFilter(new PageFilter(recordcount));
     }
 
     // add specified fields or else all fields
@@ -341,9 +361,19 @@ public class HBaseClient2 extends site.ycsb.DB {
       s.addFamily(columnFamilyBytes);
     } else {
       for (String field : fields) {
+        if (useScanValueFiltering){
+          if (!scanFilterOperation.isEmpty()) {
+            CompareOperator compareOperator = getCompareOperator(scanFilterOperation);
+            byte[] column = Bytes.toBytes(field);
+            byte[] value = getRandomFilterValue();
+            filterList.addFilter(
+                new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
+          }
+        }
         s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
       }
     }
+    s.setFilter(filterList);
 
     // get results
     ResultScanner scanner = null;
@@ -522,6 +552,30 @@ public class HBaseClient2 extends site.ycsb.DB {
   // Only non-private for testing.
   void setConfiguration(final Configuration newConfig) {
     this.config = newConfig;
+  }
+
+  private CompareOperator getCompareOperator(String operator) {
+    switch (operator) {
+    case "lessOrEqual":
+      return CompareOperator.LESS_OR_EQUAL;
+    case "greaterOrEqual":
+      return CompareOperator.GREATER_OR_EQUAL;
+    case "greater":
+      return CompareOperator.GREATER;
+    case "less":
+      return CompareOperator.LESS;
+    case "notEqual":
+      return CompareOperator.NOT_EQUAL;
+    case "equal":
+      return CompareOperator.EQUAL;
+    default:
+      throw new NoSuchElementException("");
+    }
+  }
+
+  //for testing
+  protected byte[] getRandomFilterValue() {
+    return new RandomByteIterator(100).toArray();
   }
 }
 
