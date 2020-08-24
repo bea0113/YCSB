@@ -175,8 +175,8 @@ public class HBaseClient2Test {
     // Scan 5 records, skipping the first
     client.scan(tableName, "00001", 5, null, result, conditions);
 
-    assertEquals(5, result.size());
-    for(int i = 0; i < 5; i++) {
+    assertEquals(4, result.size());
+    for(int i = 0; i < 4; i++) {
       final HashMap<String, ByteIterator> row = result.get(i);
       assertEquals(2, row.size());
       assertTrue(row.containsKey(colStr));
@@ -184,7 +184,7 @@ public class HBaseClient2Test {
       final ByteBuffer buf = ByteBuffer.wrap(bytes);
       final int rowNum = buf.getInt();
       System.out.println(rowNum);
-      assertEquals(i + 1, rowNum);
+      assertEquals(i + 2, rowNum);
     }
   }
 
