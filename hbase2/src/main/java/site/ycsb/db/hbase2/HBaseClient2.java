@@ -15,6 +15,9 @@
 
 package site.ycsb.db.hbase2;
 
+import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import site.ycsb.ByteArrayByteIterator;
 import site.ycsb.ByteIterator;
 import site.ycsb.DBException;
@@ -398,7 +401,7 @@ public class HBaseClient2 extends site.ycsb.DB {
 
   public Status scan(String table, String startkey, int recordcount,
       Set<String> fields, Vector<HashMap<String, ByteIterator>> result, List<String> conditions ) {
-    // [largerOrEqual column value], [smallerOrEqual column value]
+    // [largerOrEqual column value], [lessOrEqual column value]
     List<String[]> conditionList = new ArrayList();
     for(String condition:conditions){
       String[] parts = condition.split(" ");
@@ -422,9 +425,9 @@ public class HBaseClient2 extends site.ycsb.DB {
     // bring back in one call.
     // We get back recordcount records
     s.setCaching(recordcount);
-    if (this.usePageFilter) {
-      s.setFilter(new PageFilter(recordcount));
-    }
+    //if (this.usePageFilter) {
+    //  s.setFilter(new PageFilter(recordcount));
+    //}
 
     // add specified fields or else all fields
     if (fields == null) {
@@ -434,6 +437,42 @@ public class HBaseClient2 extends site.ycsb.DB {
         s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
       }
     }
+    SingleColumnValueFilter f1 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
+        CompareOperator.GREATER_OR_EQUAL,Bytes.toBytes(5));
+    SingleColumnValueFilter f2 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
+        CompareOperator.LESS_OR_EQUAL,Bytes.toBytes(40));
+    FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
+
+    for (String[] condition:conditionList
+         ) {
+      CompareOperator compOp;
+      switch (condition[0]){
+        case "lessOrEqual":
+          compOp = CompareOperator.LESS_OR_EQUAL;
+          break;
+        case "greaterOrEqual":
+          compOp=CompareOperator.GREATER_OR_EQUAL;
+          break;
+        case "greater":
+          compOp=CompareOperator.GREATER;
+          break;
+        case "less":
+          compOp=CompareOperator.LESS;
+          break;
+        case "notEqual":
+          compOp=CompareOperator.NOT_EQUAL;
+          break;
+        default:
+          compOp=CompareOperator.EQUAL;
+          break;
+      }
+      byte[] column = Bytes.toBytes(condition[1]);
+      byte[] value = Bytes.toBytes(Integer.parseInt(condition[2]));
+
+      filterList.addFilter(new SingleColumnValueFilter(columnFamilyBytes, column, compOp, value));
+    }
+    //filterList.addFilter(f1);
+    s.setFilter(filterList);
 
     // get results
     ResultScanner scanner = null;
@@ -456,29 +495,11 @@ public class HBaseClient2 extends site.ycsb.DB {
           rowResult.put(Bytes.toString(CellUtil.cloneQualifier(cell)),
               new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
         }
-        boolean filtersMatch = true;
-        for (String[] condition:conditionList){
-          String col = condition[1];
-          int value = Integer.parseInt(condition[2]);
-          rowResult.get(col).reset();
-          ByteIterator x = rowResult.get(col);
-          int res = ByteBuffer.wrap(x.toArray()).getInt();
-          if(condition[0].equals("largerOrEqual")){
-            filtersMatch = (res >=value) && filtersMatch;
-          }
-          else if(condition[0].equals("smallerOrEqual")){
-            filtersMatch = (res <= value) && filtersMatch;
-          }
-        }
 
-
-        // add rowResult to result vector if the filters match
-        if (filtersMatch) {
-          rowResult.get("aaaa").reset();
-          System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
-          result.add(rowResult);
-          numResults++;
-        }
+        System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
+        // add rowResult to result vector
+        result.add(rowResult);
+        numResults++;
 
         // PageFilter does not guarantee that the number of results is <=
         // pageSize, so this
