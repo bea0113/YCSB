@@ -47,10 +47,9 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -320,7 +319,7 @@ public class HBaseClient2 extends site.ycsb.DB {
    */
   @Override
   public Status scan(String table, String startkey, int recordcount,
-      Set<String> fields, Vector<HashMap<String, ByteIterator>> result ) {
+      Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
     // if this is a "new" table, init HTable object. Else, use existing one
     if (!tableName.equals(table)) {
       currentTable = null;
@@ -373,7 +372,6 @@ public class HBaseClient2 extends site.ycsb.DB {
               new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
         }
 
-        System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
         // add rowResult to result vector
         result.add(rowResult);
         numResults++;
@@ -399,12 +397,12 @@ public class HBaseClient2 extends site.ycsb.DB {
     return Status.OK;
   }
 
-  public Status scan(String table, String startkey, int recordcount,
-      Set<String> fields, Vector<HashMap<String, ByteIterator>> result, List<String> conditions ) {
+  public Status filteredScan(String table, String startkey, int recordcount,
+      List<String> conditions, Vector<HashMap<String, ByteIterator>> result) {
     // [largerOrEqual column value], [lessOrEqual column value]
-    List<String[]> conditionList = new ArrayList();
+    Set<String[]> conditionList = new HashSet<>();
     for(String condition:conditions){
-      String[] parts = condition.split(" ");
+      String[] parts = condition.split("_");
       conditionList.add(parts);
     }
 
@@ -429,47 +427,39 @@ public class HBaseClient2 extends site.ycsb.DB {
     //  s.setFilter(new PageFilter(recordcount));
     //}
 
-    // add specified fields or else all fields
-    if (fields == null) {
-      s.addFamily(columnFamilyBytes);
-    } else {
-      for (String field : fields) {
-        s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
-      }
-    }
-    SingleColumnValueFilter f1 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
-        CompareOperator.GREATER_OR_EQUAL,Bytes.toBytes(5));
-    SingleColumnValueFilter f2 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
-        CompareOperator.LESS_OR_EQUAL,Bytes.toBytes(40));
+//    SingleColumnValueFilter f1 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
+//        CompareOperator.GREATER_OR_EQUAL,Bytes.toBytes(5));
+//    SingleColumnValueFilter f2 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
+//        CompareOperator.LESS_OR_EQUAL,Bytes.toBytes(40));
     FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
 
-    for (String[] condition:conditionList
-         ) {
+    for (String[] condition:conditionList) {
       CompareOperator compOp;
-      switch (condition[0]){
-        case "lessOrEqual":
-          compOp = CompareOperator.LESS_OR_EQUAL;
-          break;
-        case "greaterOrEqual":
-          compOp=CompareOperator.GREATER_OR_EQUAL;
-          break;
-        case "greater":
-          compOp=CompareOperator.GREATER;
-          break;
-        case "less":
-          compOp=CompareOperator.LESS;
-          break;
-        case "notEqual":
-          compOp=CompareOperator.NOT_EQUAL;
-          break;
-        default:
-          compOp=CompareOperator.EQUAL;
-          break;
+      switch (condition[0]) {
+      case "lessOrEqual":
+        compOp = CompareOperator.LESS_OR_EQUAL;
+        break;
+      case "greaterOrEqual":
+        compOp = CompareOperator.GREATER_OR_EQUAL;
+        break;
+      case "greater":
+        compOp = CompareOperator.GREATER;
+        break;
+      case "less":
+        compOp = CompareOperator.LESS;
+        break;
+      case "notEqual":
+        compOp = CompareOperator.NOT_EQUAL;
+        break;
+      default:
+        compOp = CompareOperator.EQUAL;
+        break;
       }
       byte[] column = Bytes.toBytes(condition[1]);
       byte[] value = Bytes.toBytes(Integer.parseInt(condition[2]));
 
-      filterList.addFilter(new SingleColumnValueFilter(columnFamilyBytes, column, compOp, value));
+      filterList.addFilter(
+          new SingleColumnValueFilter(columnFamilyBytes, column, compOp, value));
     }
     //filterList.addFilter(f1);
     s.setFilter(filterList);
@@ -496,7 +486,8 @@ public class HBaseClient2 extends site.ycsb.DB {
               new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
         }
 
-        System.out.println(ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
+        //System.out.println(
+        // ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
         // add rowResult to result vector
         result.add(rowResult);
         numResults++;

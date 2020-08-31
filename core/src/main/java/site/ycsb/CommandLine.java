@@ -51,6 +51,7 @@ public final class CommandLine {
     System.out.println("Commands:");
     System.out.println("  read key [field1 field2 ...] - Read a record");
     System.out.println("  scan key recordcount [field1 field2 ...] - Scan starting at key");
+    System.out.println("  filteredScan key recordcount [filter1 filter2 ...] - Scan starting at key");
     System.out.println("  insert key name1=value1 [name2=value2 ...] - Insert a new record");
     System.out.println("  update key name1=value1 [name2=value2 ...] - Update a record");
     System.out.println("  delete key - Delete a record");
@@ -143,6 +144,8 @@ public final class CommandLine {
         handleRead(tokens, table, db);
       } else if (tokens[0].compareTo("scan") == 0) {
         handleScan(tokens, table, db);
+      }else if (tokens[0].compareTo("filteredScan") == 0) {
+        handleFilteredScan(tokens, table, db);
       } else if (tokens[0].compareTo("update") == 0) {
         handleUpdate(tokens, table, db);
       } else if (tokens[0].compareTo("insert") == 0) {
@@ -296,6 +299,43 @@ public final class CommandLine {
 
       Vector<HashMap<String, ByteIterator>> results = new Vector<>();
       Status ret = db.scan(table, tokens[1], Integer.parseInt(tokens[2]), fields, results);
+      System.out.println("Result: " + ret.getName());
+      int record = 0;
+      if (results.isEmpty()) {
+        System.out.println("0 records");
+      } else {
+        System.out.println("--------------------------------");
+      }
+      for (Map<String, ByteIterator> result : results) {
+        System.out.println("Record " + (record++));
+        for (Map.Entry<String, ByteIterator> ent : result.entrySet()) {
+          System.out.println(ent.getKey() + "=" + ent.getValue());
+        }
+        System.out.println("--------------------------------");
+      }
+    }
+  }
+
+  private static void handleFilteredScan(String[] tokens, String table, DB db) {
+    if (tokens.length < 3) {
+      System.out.println("Error: syntax is \"scan keyname scanlength [filter1 filter2 ...]\"");
+    } else {
+      Set<String> filters = null;
+
+      if (tokens.length > 3) {
+        filters = new HashSet<>();
+
+        filters.addAll(Arrays.asList(tokens).subList(3, tokens.length));
+        System.out.println();
+        for (String filter:filters
+             ) {
+          System.out.println(filter);
+        }
+        System.out.println();
+      }
+
+      Vector<HashMap<String, ByteIterator>> results = new Vector<>();
+      Status ret = db.scan(table, tokens[1], Integer.parseInt(tokens[2]), filters, results);
       System.out.println("Result: " + ret.getName());
       int record = 0;
       if (results.isEmpty()) {

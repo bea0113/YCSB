@@ -48,8 +48,10 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.Vector;
 
 /**
@@ -150,7 +152,7 @@ public class HBaseClient2Test {
   }
 
   @Test
-  public void testScan() throws Exception {
+  public void testFilteredScan() throws Exception {
     // Fill with data
     final String colStr = "row_number";
     final byte[] col = Bytes.toBytes(colStr);
@@ -170,10 +172,11 @@ public class HBaseClient2Test {
     final Vector<HashMap<String, ByteIterator>> result =
         new Vector<HashMap<String, ByteIterator>>();
 
-    List<String> conditions= new ArrayList<>(Arrays.asList(  "greaterOrEqual aaaa 1", "lessOrEqual aaaa 30"));
+    List<String>
+        conditions= new ArrayList<>(Arrays.asList(  "greaterOrEqual_aaaa_2", "lessOrEqual_aaaa_40"));
 
     // Scan 5 records, skipping the first
-    client.scan(tableName, "00001", 5, null, result, conditions);
+    client.filteredScan(tableName, "00001", 5, conditions, result);
 
     assertEquals(5, result.size());
     for(int i = 0; i < 5; i++) {
@@ -184,7 +187,42 @@ public class HBaseClient2Test {
       final ByteBuffer buf = ByteBuffer.wrap(bytes);
       final int rowNum = buf.getInt();
       System.out.println(rowNum);
-      assertEquals(i +1, rowNum);
+      assertEquals(i +2, rowNum);
+    }
+  }
+
+  @Test
+  public void testScan() throws Exception {
+    // Fill with data
+    final String colStr = "row_number";
+    final byte[] col = Bytes.toBytes(colStr);
+    final int n = 10;
+    final List<Put> puts = new ArrayList<Put>(n);
+    for(int i = 0; i < n; i++) {
+      final byte[] key = Bytes.toBytes(String.format("%05d", i));
+      final byte[] value = java.nio.ByteBuffer.allocate(4).putInt(i).array();
+      final Put p = new Put(key);
+      p.addColumn(Bytes.toBytes(COLUMN_FAMILY), col, value);
+      puts.add(p);
+    }
+    table.put(puts);
+
+    // Test
+    final Vector<HashMap<String, ByteIterator>> result =
+        new Vector<HashMap<String, ByteIterator>>();
+
+    // Scan 5 records, skipping the first
+    client.scan(tableName, "00001", 5, null, result);
+
+    assertEquals(5, result.size());
+    for(int i = 0; i < 5; i++) {
+      final HashMap<String, ByteIterator> row = result.get(i);
+      assertEquals(1, row.size());
+      assertTrue(row.containsKey(colStr));
+      final byte[] bytes = row.get(colStr).toArray();
+      final ByteBuffer buf = ByteBuffer.wrap(bytes);
+      final int rowNum = buf.getInt();
+      assertEquals(i + 1, rowNum);
     }
   }
 
