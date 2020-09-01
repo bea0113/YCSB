@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -105,6 +106,12 @@ public class HBaseClient2 extends site.ycsb.DB {
    */
   private boolean clientSideBuffering = false;
   private long writeBufferSize = 1024 * 1024 * 12;
+
+  /**
+   * If true, value filtering during scans.
+   */
+  private boolean useScanValueFiltering = false;
+  private String scanFilterOperation = "";
 
   /**
    * Initialize any state for this DB. Called once per DB instance; there is one
@@ -173,6 +180,13 @@ public class HBaseClient2 extends site.ycsb.DB {
     if ("false"
         .equals(getProperties().getProperty("hbase.usepagefilter", "true"))) {
       usePageFilter = false;
+    }
+
+    if ("true"
+        .equals(
+            getProperties().getProperty("hbase.usescanvaluefiltering","false"))) {
+      useScanValueFiltering=true;
+      scanFilterOperation = getProperties().getProperty("hbase.scanfilteroperation");
     }
 
     columnFamily = getProperties().getProperty("columnfamily");
@@ -336,9 +350,12 @@ public class HBaseClient2 extends site.ycsb.DB {
     // HBase has no record limit. Here, assume recordcount is small enough to
     // bring back in one call.
     // We get back recordcount records
+
+    FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
+
     s.setCaching(recordcount);
     if (this.usePageFilter) {
-      s.setFilter(new PageFilter(recordcount));
+      filterList.addFilter(new PageFilter(recordcount));
     }
 
     // add specified fields or else all fields
@@ -346,6 +363,23 @@ public class HBaseClient2 extends site.ycsb.DB {
       s.addFamily(columnFamilyBytes);
     } else {
       for (String field : fields) {
+        if (useScanValueFiltering){
+          //scanFilterOperation is not set, filters are in the fields: compop_field_value
+          if(scanFilterOperation.isEmpty()){
+            if(field.contains("_")){
+              String[] filter = field.split("_");
+              CompareOperator compareOperator = getCompareOperator(filter[0]);
+              byte[] column = Bytes.toBytes(filter[1]);
+              byte[] value = Bytes.toBytes(Integer.parseInt(filter[2]));
+              filterList.addFilter(
+                  new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
+            }
+          }
+          // scanFilterOperation is set, filtering by random value on column ?
+          else{
+
+          }
+        }
         s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
       }
     }
@@ -422,46 +456,21 @@ public class HBaseClient2 extends site.ycsb.DB {
     // HBase has no record limit. Here, assume recordcount is small enough to
     // bring back in one call.
     // We get back recordcount records
-    s.setCaching(recordcount);
-    //if (this.usePageFilter) {
-    //  s.setFilter(new PageFilter(recordcount));
-    //}
-
-//    SingleColumnValueFilter f1 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
-//        CompareOperator.GREATER_OR_EQUAL,Bytes.toBytes(5));
-//    SingleColumnValueFilter f2 =new SingleColumnValueFilter(columnFamilyBytes, Bytes.toBytes("aaaa"),
-//        CompareOperator.LESS_OR_EQUAL,Bytes.toBytes(40));
     FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
 
+    s.setCaching(recordcount);
+    if (this.usePageFilter) {
+      filterList.addFilter(new PageFilter(recordcount));
+    }
+
     for (String[] condition:conditionList) {
-      CompareOperator compOp;
-      switch (condition[0]) {
-      case "lessOrEqual":
-        compOp = CompareOperator.LESS_OR_EQUAL;
-        break;
-      case "greaterOrEqual":
-        compOp = CompareOperator.GREATER_OR_EQUAL;
-        break;
-      case "greater":
-        compOp = CompareOperator.GREATER;
-        break;
-      case "less":
-        compOp = CompareOperator.LESS;
-        break;
-      case "notEqual":
-        compOp = CompareOperator.NOT_EQUAL;
-        break;
-      default:
-        compOp = CompareOperator.EQUAL;
-        break;
-      }
+      CompareOperator compOp=getCompareOperator(condition[0]);
       byte[] column = Bytes.toBytes(condition[1]);
       byte[] value = Bytes.toBytes(Integer.parseInt(condition[2]));
 
       filterList.addFilter(
           new SingleColumnValueFilter(columnFamilyBytes, column, compOp, value));
     }
-    //filterList.addFilter(f1);
     s.setFilter(filterList);
 
     // get results
@@ -645,6 +654,25 @@ public class HBaseClient2 extends site.ycsb.DB {
   // Only non-private for testing.
   void setConfiguration(final Configuration newConfig) {
     this.config = newConfig;
+  }
+
+  private CompareOperator getCompareOperator(String operator){
+    switch (operator) {
+      case "lessOrEqual":
+        return CompareOperator.LESS_OR_EQUAL;
+      case "greaterOrEqual":
+        return CompareOperator.GREATER_OR_EQUAL;
+      case "greater":
+        return CompareOperator.GREATER;
+      case "less":
+        return CompareOperator.LESS;
+      case "notEqual":
+        return CompareOperator.NOT_EQUAL;
+      case "equal":
+        return CompareOperator.EQUAL;
+      default:
+        throw new NoSuchElementException("");
+    }
   }
 }
 
