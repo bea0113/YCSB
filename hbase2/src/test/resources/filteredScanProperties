@@ -1,0 +1,4 @@
+columnfamily=cf
+hbase.usescanvaluefiltering=true
+hbase.scanfilteroperation=greater
+fields=row_number

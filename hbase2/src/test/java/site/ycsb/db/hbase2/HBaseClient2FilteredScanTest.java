@@ -1,48 +1,19 @@
-/**
- * Licensed under the Apache License, Version 2.0 (the "License"); you
- * may not use this file except in compliance with the License. You
- * may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
- * implied. See the License for the specific language governing
- * permissions and limitations under the License. See accompanying
- * LICENSE file.
- */
-
 package site.ycsb.db.hbase2;
-
-import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY;
-import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY_DEFAULT;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.junit.Assume.assumeTrue;
-
-import site.ycsb.ByteIterator;
-import site.ycsb.Status;
-import site.ycsb.StringByteIterator;
-import site.ycsb.measurements.Measurements;
-import site.ycsb.workloads.CoreWorkload;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
+import site.ycsb.ByteIterator;
+import site.ycsb.measurements.Measurements;
+import site.ycsb.workloads.CoreWorkload;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -51,10 +22,13 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
 
-/**
- * Integration tests for the YCSB HBase 2 client using an HBase minicluster.
- */
-public class HBaseClient2Test {
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
+import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY;
+import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY_DEFAULT;
+
+public class HBaseClient2FilteredScanTest {
 
   private final static String COLUMN_FAMILY = "cf";
 
@@ -103,7 +77,9 @@ public class HBaseClient2Test {
     client.setConfiguration(new Configuration(testingUtil.getConfiguration()));
 
     Properties p = new Properties();
-    p.setProperty("columnfamily", COLUMN_FAMILY);
+    //p.setProperty("columnfamily", COLUMN_FAMILY);
+    //p.load(getClass().getClassLoader().getResourceAsStream("basicProperties"));
+    p.load(getClass().getClassLoader().getResourceAsStream("filteredScanProperties"));
 
     Measurements.setProperties(p);
     final CoreWorkload workload = new CoreWorkload();
@@ -122,34 +98,9 @@ public class HBaseClient2Test {
     testingUtil.deleteTable(TableName.valueOf(tableName));
   }
 
-  @Test
-  public void testRead() throws Exception {
-    final String rowKey = "row1";
-    final Put p = new Put(Bytes.toBytes(rowKey));
-    p.addColumn(Bytes.toBytes(COLUMN_FAMILY),
-        Bytes.toBytes("column1"), Bytes.toBytes("value1"));
-    p.addColumn(Bytes.toBytes(COLUMN_FAMILY),
-        Bytes.toBytes("column2"), Bytes.toBytes("value2"));
-    table.put(p);
-
-    final HashMap<String, ByteIterator> result = new HashMap<String, ByteIterator>();
-    final Status status = client.read(tableName, rowKey, null, result);
-    assertEquals(Status.OK, status);
-    assertEquals(2, result.size());
-    assertEquals("value1", result.get("column1").toString());
-    assertEquals("value2", result.get("column2").toString());
-  }
 
   @Test
-  public void testReadMissingRow() throws Exception {
-    final HashMap<String, ByteIterator> result = new HashMap<String, ByteIterator>();
-    final Status status = client.read(tableName, "Missing row", null, result);
-    assertEquals(Status.NOT_FOUND, status);
-    assertEquals(0, result.size());
-  }
-
-  @Test
-  public void testScan() throws Exception {
+  public void testScanFiltered() throws Exception {
     // Fill with data
     final String colStr = "row_number";
     final byte[] col = Bytes.toBytes(colStr);
@@ -183,31 +134,4 @@ public class HBaseClient2Test {
     }
   }
 
-  @Test
-  public void testUpdate() throws Exception{
-    final String key = "key";
-    final HashMap<String, String> input = new HashMap<String, String>();
-    input.put("column1", "value1");
-    input.put("column2", "value2");
-    final Status status = client.insert(tableName, key, StringByteIterator.getByteIteratorMap(input));
-    assertEquals(Status.OK, status);
-
-    // Verify result
-    final Get get = new Get(Bytes.toBytes(key));
-    final Result result = this.table.get(get);
-    assertFalse(result.isEmpty());
-    assertEquals(2, result.size());
-    for(final java.util.Map.Entry<String, String> entry : input.entrySet()) {
-      assertEquals(entry.getValue(),
-          new String(result.getValue(Bytes.toBytes(COLUMN_FAMILY),
-            Bytes.toBytes(entry.getKey()))));
-    }
-  }
-
-  @Test
-  @Ignore("Not yet implemented")
-  public void testDelete() {
-    fail("Not yet implemented");
-  }
 }
-

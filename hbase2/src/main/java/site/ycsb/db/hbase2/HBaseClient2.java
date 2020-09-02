@@ -49,12 +49,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import java.io.IOException;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.Set;
 import java.util.Vector;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static site.ycsb.workloads.CoreWorkload.TABLENAME_PROPERTY;
@@ -364,112 +364,17 @@ public class HBaseClient2 extends site.ycsb.DB {
     } else {
       for (String field : fields) {
         if (useScanValueFiltering){
-          //scanFilterOperation is not set, filters are in the fields: compop_field_value
-          if(scanFilterOperation.isEmpty()){
-            if(field.contains("_")){
-              String[] filter = field.split("_");
-              CompareOperator compareOperator = getCompareOperator(filter[0]);
-              byte[] column = Bytes.toBytes(filter[1]);
-              byte[] value = Bytes.toBytes(Integer.parseInt(filter[2]));
-              filterList.addFilter(
-                  new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
-            }
-          }
-          // scanFilterOperation is set, filtering by random value on column ?
-          else{
-
+          if (!scanFilterOperation.isEmpty()) {
+            CompareOperator compareOperator = getCompareOperator(scanFilterOperation);
+            byte[] column = Bytes.toBytes(field);
+            int v = ThreadLocalRandom.current().nextInt(0,3);
+            byte[] value = Bytes.toBytes(v);
+            filterList.addFilter(
+                new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
           }
         }
         s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
       }
-    }
-
-    // get results
-    ResultScanner scanner = null;
-    try {
-      scanner = currentTable.getScanner(s);
-      int numResults = 0;
-      for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
-        // get row key
-        String key = Bytes.toString(rr.getRow());
-
-        if (debug) {
-          System.out.println("Got scan result for key: " + key);
-        }
-
-        HashMap<String, ByteIterator> rowResult =
-            new HashMap<String, ByteIterator>();
-
-        while (rr.advance()) {
-          final Cell cell = rr.current();
-          rowResult.put(Bytes.toString(CellUtil.cloneQualifier(cell)),
-              new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
-        }
-
-        // add rowResult to result vector
-        result.add(rowResult);
-        numResults++;
-
-        // PageFilter does not guarantee that the number of results is <=
-        // pageSize, so this
-        // break is required.
-        if (numResults >= recordcount) {// if hit recordcount, bail out
-          break;
-        }
-      } // done with row
-    } catch (IOException e) {
-      if (debug) {
-        System.out.println("Error in getting/parsing scan result: " + e);
-      }
-      return Status.ERROR;
-    } finally {
-      if (scanner != null) {
-        scanner.close();
-      }
-    }
-
-    return Status.OK;
-  }
-
-  public Status filteredScan(String table, String startkey, int recordcount,
-      List<String> conditions, Vector<HashMap<String, ByteIterator>> result) {
-    // [largerOrEqual column value], [lessOrEqual column value]
-    Set<String[]> conditionList = new HashSet<>();
-    for(String condition:conditions){
-      String[] parts = condition.split("_");
-      conditionList.add(parts);
-    }
-
-    // if this is a "new" table, init HTable object. Else, use existing one
-    if (!tableName.equals(table)) {
-      currentTable = null;
-      try {
-        getHTable(table);
-        tableName = table;
-      } catch (IOException e) {
-        System.err.println("Error accessing HBase table: " + e);
-        return Status.ERROR;
-      }
-    }
-
-    Scan s = new Scan(Bytes.toBytes(startkey));
-    // HBase has no record limit. Here, assume recordcount is small enough to
-    // bring back in one call.
-    // We get back recordcount records
-    FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
-
-    s.setCaching(recordcount);
-    if (this.usePageFilter) {
-      filterList.addFilter(new PageFilter(recordcount));
-    }
-
-    for (String[] condition:conditionList) {
-      CompareOperator compOp=getCompareOperator(condition[0]);
-      byte[] column = Bytes.toBytes(condition[1]);
-      byte[] value = Bytes.toBytes(Integer.parseInt(condition[2]));
-
-      filterList.addFilter(
-          new SingleColumnValueFilter(columnFamilyBytes, column, compOp, value));
     }
     s.setFilter(filterList);
 
@@ -495,8 +400,6 @@ public class HBaseClient2 extends site.ycsb.DB {
               new ByteArrayByteIterator(CellUtil.cloneValue(cell)));
         }
 
-        //System.out.println(
-        // ByteBuffer.wrap(rowResult.get("aaaa").toArray()).getInt());
         // add rowResult to result vector
         result.add(rowResult);
         numResults++;
@@ -521,8 +424,6 @@ public class HBaseClient2 extends site.ycsb.DB {
 
     return Status.OK;
   }
-
-
 
   /**
    * Update a record in the database. Any field/value pairs in the specified
