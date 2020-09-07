@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import site.ycsb.ByteArrayByteIterator;
 import site.ycsb.ByteIterator;
 import site.ycsb.DBException;
+import site.ycsb.RandomByteIterator;
 import site.ycsb.Status;
 import site.ycsb.measurements.Measurements;
 
@@ -368,7 +369,7 @@ public class HBaseClient2 extends site.ycsb.DB {
             CompareOperator compareOperator = getCompareOperator(scanFilterOperation);
             byte[] column = Bytes.toBytes(field);
             int v = ThreadLocalRandom.current().nextInt(0,3);
-            byte[] value = Bytes.toBytes(v);
+            byte[] value = getRandomFilterValue();
             filterList.addFilter(
                 new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
           }
@@ -574,6 +575,11 @@ public class HBaseClient2 extends site.ycsb.DB {
       default:
         throw new NoSuchElementException("");
     }
+  }
+
+  //for testing
+  protected byte[] getRandomFilterValue(){
+    return new RandomByteIterator(100).toArray();
   }
 }
 

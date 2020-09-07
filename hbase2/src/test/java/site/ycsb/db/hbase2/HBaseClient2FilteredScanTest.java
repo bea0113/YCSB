@@ -8,7 +8,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import site.ycsb.ByteIterator;
@@ -17,7 +16,9 @@ import site.ycsb.workloads.CoreWorkload;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Vector;
@@ -66,20 +67,30 @@ public class HBaseClient2FilteredScanTest {
     }
   }
 
+  final class HBase2ClientWithConstantValueFilter extends HBaseClient2{
+    private byte[] valueFilter;
+
+    HBase2ClientWithConstantValueFilter(byte[] valueFilter) {
+      this.valueFilter = valueFilter;
+    }
+
+    @Override
+    protected byte[] getRandomFilterValue(){
+      return valueFilter;
+    }
+
+  }
+
   /**
    * Sets up the mini-cluster for testing.
    *
    * We re-create the table for each test.
    */
-  @Before
-  public void setUp() throws Exception {
-    client = new HBaseClient2();
-    client.setConfiguration(new Configuration(testingUtil.getConfiguration()));
 
-    Properties p = new Properties();
-    //p.setProperty("columnfamily", COLUMN_FAMILY);
-    //p.load(getClass().getClassLoader().getResourceAsStream("basicProperties"));
-    p.load(getClass().getClassLoader().getResourceAsStream("filteredScanProperties"));
+  public void setUp(Properties p, byte[] randomFilteringValue) throws Exception {
+    p.setProperty("columnfamily", COLUMN_FAMILY);
+    client = new HBase2ClientWithConstantValueFilter(randomFilteringValue);
+    client.setConfiguration(new Configuration(testingUtil.getConfiguration()));
 
     Measurements.setProperties(p);
     final CoreWorkload workload = new CoreWorkload();
@@ -100,11 +111,13 @@ public class HBaseClient2FilteredScanTest {
 
 
   @Test
-  public void testScanFiltered() throws Exception {
+  public void testScan() throws Exception {
+    Properties properties=new Properties();
+    setUp(properties, Bytes.toBytes(5));
     // Fill with data
     final String colStr = "row_number";
     final byte[] col = Bytes.toBytes(colStr);
-    final int n = 10;
+    final int n = 15;
     final List<Put> puts = new ArrayList<Put>(n);
     for(int i = 0; i < n; i++) {
       final byte[] key = Bytes.toBytes(String.format("%05d", i));
@@ -120,10 +133,51 @@ public class HBaseClient2FilteredScanTest {
         new Vector<HashMap<String, ByteIterator>>();
 
     // Scan 5 records, skipping the first
-    client.scan(tableName, "00001", 5, null, result);
+    client.scan(tableName, "00001", 10, new HashSet<>(Arrays.asList("row_number")), result);
 
-    assertEquals(5, result.size());
+    assertEquals(10, result.size());
     for(int i = 0; i < 5; i++) {
+      final HashMap<String, ByteIterator> row = result.get(i);
+      assertEquals(1, row.size());
+      assertTrue(row.containsKey(colStr));
+      final byte[] bytes = row.get(colStr).toArray();
+      final ByteBuffer buf = ByteBuffer.wrap(bytes);
+      final int rowNum = buf.getInt();
+      assertEquals(i + 1, rowNum);
+    }
+  }
+
+  @Test
+  public void testScanWithProperty() throws Exception {
+    Properties properties=new Properties();
+    properties.setProperty("hbase.usescanvaluefiltering", String.valueOf(true));
+    properties.setProperty("hbase.scanfilteroperation","less");
+    properties.setProperty("debug",String.valueOf(true));
+
+    setUp(properties, Bytes.toBytes(5));
+    // Fill with data
+    final String colStr = "row_number";
+    final byte[] col = Bytes.toBytes(colStr);
+    final int n = 15;
+    final List<Put> puts = new ArrayList<Put>(n);
+    for(int i = 0; i < n; i++) {
+      final byte[] key = Bytes.toBytes(String.format("%05d", i));
+      final byte[] value = java.nio.ByteBuffer.allocate(4).putInt(i).array();
+      final Put p = new Put(key);
+      p.addColumn(Bytes.toBytes(COLUMN_FAMILY), col, value);
+      puts.add(p);
+    }
+    table.put(puts);
+
+    // Test
+    final Vector<HashMap<String, ByteIterator>> result =
+        new Vector<HashMap<String, ByteIterator>>();
+
+    // Scan 5 records, skipping the first
+    client.scan(tableName, "00001", 5, new HashSet<>(Arrays.asList("row_number")), result);
+    int expected = 4;
+    assertEquals(expected, result.size());
+    for(int i = 0; i < expected; i++) {
       final HashMap<String, ByteIterator> row = result.get(i);
       assertEquals(1, row.size());
       assertTrue(row.containsKey(colStr));
