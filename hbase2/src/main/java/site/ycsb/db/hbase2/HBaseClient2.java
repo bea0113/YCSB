@@ -15,6 +15,9 @@
 
 package site.ycsb.db.hbase2;
 
+import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import site.ycsb.ByteArrayByteIterator;
 import site.ycsb.ByteIterator;
 import site.ycsb.DBException;
@@ -26,7 +29,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -42,9 +44,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
@@ -193,10 +193,7 @@ public class HBaseClient2 extends site.ycsb.DB {
     columnFamilyBytes = Bytes.toBytes(columnFamily);
   }
 
-  private boolean isParamSetAndTrue(String param){
-    return "true"
-        .equals(getProperties().getProperty(param, "false"));
-  }
+
 
   /**
    * Cleanup any state for this DB. Called once per DB instance; there is one DB
@@ -351,7 +348,6 @@ public class HBaseClient2 extends site.ycsb.DB {
     // HBase has no record limit. Here, assume recordcount is small enough to
     // bring back in one call.
     // We get back recordcount records
-
     FilterList filterList = new FilterList(FilterList.Operator.MUST_PASS_ALL);
 
     s.setCaching(recordcount);
@@ -557,6 +553,11 @@ public class HBaseClient2 extends site.ycsb.DB {
     this.config = newConfig;
   }
 
+  private boolean isParamSetAndTrue(String param){
+    return "true"
+        .equals(getProperties().getProperty(param, "false"));
+  }
+
   private CompareOperator getCompareOperator(String operator) {
     switch (operator) {
     case "lessOrEqual":
@@ -581,6 +582,7 @@ public class HBaseClient2 extends site.ycsb.DB {
     return new RandomByteIterator(100).toArray();
   }
 }
+
 
 /*
  * For customized vim control set autoindent set si set shiftwidth=4
