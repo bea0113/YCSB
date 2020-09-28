@@ -110,7 +110,7 @@ public class HBaseClient2 extends site.ycsb.DB {
    * If true, we will configure server-side value filtering during scans.
    */
   private boolean useScanValueFiltering = false;
-  private String scanFilterOperator = "lessOrEqual";
+  private String scanFilterOperator = "";
 
   /**
    * Initialize any state for this DB. Called once per DB instance; there is one
@@ -182,7 +182,8 @@ public class HBaseClient2 extends site.ycsb.DB {
 
     if (isParamSetAndTrue("hbase.usescanvaluefiltering")) {
       useScanValueFiltering=true;
-      scanFilterOperator = getProperties().getProperty("hbase.scanfilteroperator");
+      String operator = getProperties().getProperty("hbase.scanfilteroperator");
+      scanFilterOperator = operator.isEmpty() ? "lessOrEqual" : operator;
     }
 
     columnFamily = getProperties().getProperty("columnfamily");
@@ -361,13 +362,11 @@ public class HBaseClient2 extends site.ycsb.DB {
     } else {
       for (String field : fields) {
         if (useScanValueFiltering){
-          if (!scanFilterOperator.isEmpty()) {
-            CompareOperator compareOperator = getCompareOperator(scanFilterOperator);
-            byte[] column = Bytes.toBytes(field);
-            byte[] value = getRandomFilterValue();
-            filterList.addFilter(
-                new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
-          }
+          CompareOperator compareOperator = getCompareOperator(scanFilterOperator);
+          byte[] column = Bytes.toBytes(field);
+          byte[] value = getRandomFilterValue();
+          filterList.addFilter(
+              new SingleColumnValueFilter(columnFamilyBytes, column, compareOperator, value));
         }
         s.addColumn(columnFamilyBytes, Bytes.toBytes(field));
       }

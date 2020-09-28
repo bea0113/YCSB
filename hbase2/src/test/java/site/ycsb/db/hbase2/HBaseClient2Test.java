@@ -216,7 +216,7 @@ public class HBaseClient2Test {
 
   @Test
   public void testScanWithFiltering() throws Exception {
-    Properties properties=new Properties();
+    Properties properties = setPropertiesForFiltering("");
     setUp(properties, Bytes.toBytes(5));
     // Fill with data
     final String colStr = "row_number";
@@ -226,10 +226,10 @@ public class HBaseClient2Test {
     final Vector<HashMap<String, ByteIterator>> result =
         new Vector<HashMap<String, ByteIterator>>();
 
-    // Scan 5 records, skipping the first
+
     client.scan(tableName, "00001", 10, new HashSet<>(Collections.singletonList(colStr)), result);
 
-    assertEquals(10, result.size());
+    assertEquals(5, result.size());
     for(int i = 0; i < 5; i++) {
       final HashMap<String, ByteIterator> row = result.get(i);
       assertEquals(1, row.size());
@@ -325,7 +325,7 @@ public class HBaseClient2Test {
   private Properties setPropertiesForFiltering(String operation){
     Properties p = new Properties();
     p.setProperty("hbase.usescanvaluefiltering", String.valueOf(true));
-    p.setProperty("hbase.scanfilteroperation",operation);
+    p.setProperty("hbase.scanfilteroperator",operation);
     return p;
   }
 
