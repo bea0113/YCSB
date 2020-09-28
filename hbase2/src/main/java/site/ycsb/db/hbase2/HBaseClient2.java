@@ -176,14 +176,14 @@ public class HBaseClient2 extends site.ycsb.DB {
       debug = true;
     }
 
-    if (!isParamSetAndTrue("hbase.usepagefilter")) {
+    if (isBooleanParamSet("hbase.usepagefilter", true)) {
       usePageFilter = false;
     }
 
-    if (isParamSetAndTrue("hbase.usescanvaluefiltering")) {
+    if (isBooleanParamSet("hbase.usescanvaluefiltering", false)) {
       useScanValueFiltering=true;
       String operator = getProperties().getProperty("hbase.scanfilteroperator");
-      scanFilterOperator = operator.isEmpty() ? "lessOrEqual" : operator;
+      scanFilterOperator = operator == null || operator.trim().isEmpty() ? "lessOrEqual" : operator;
     }
 
     columnFamily = getProperties().getProperty("columnfamily");
@@ -552,9 +552,9 @@ public class HBaseClient2 extends site.ycsb.DB {
     this.config = newConfig;
   }
 
-  private boolean isParamSetAndTrue(String param){
-    return "true"
-        .equals(getProperties().getProperty(param, "false"));
+  private boolean isBooleanParamSet(String param, boolean defaultValue){
+    String value = getProperties().getProperty(param, Boolean.toString(defaultValue));
+    return "true".equalsIgnoreCase(value);
   }
 
   private CompareOperator getCompareOperator(String operator) {
